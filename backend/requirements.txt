@@ -1,0 +1,35 @@
+# Runtime dependencies of the API image (PyTorch is installed separately as the CPU build)
+
+# Web framework
+fastapi>=0.136.0
+uvicorn[standard]>=0.40.0
+python-multipart>=0.0.22
+pydantic>=2.12.0
+pydantic-settings>=2.12.0
+
+# Security & authentication
+PyJWT>=2.10.0
+bcrypt>=4.2.0
+email-validator>=2.2.0
+httpx>=0.26.0  # OAuth provider calls
+
+# Database
+SQLAlchemy>=2.0.36
+alembic>=1.14.0
+psycopg[binary]>=3.2.3
+
+# MLflow client: experiment tracking + model registry
+# (pinned to the same version as the tracking server image in docker-compose.yml)
+mlflow-skinny==3.17.2
+
+# Deep learning & bioinformatics
+torch>=2.0.0
+numpy>=1.24.0
+biopython>=1.81
+pandas>=2.0.0  # export formats
+
+# File handling, monitoring & caching
+aiofiles>=23.2.1
+prometheus-client>=0.21.0
+psutil>=5.9.0
+redis>=5.0.0

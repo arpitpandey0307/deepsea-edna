@@ -1,0 +1,48 @@
+# Pull request summary. Tests, builds and the E2E stack run in ci-cd.yml, which also triggers on PRs.
+name: Pull Request Checks
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-summary:
+    name: PR summary and size check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Summarize changes
+        env:
+          BASE: origin/${{ github.event.pull_request.base.ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          {
+            echo "## PR #${{ github.event.pull_request.number }}: $TITLE"
+            echo ""
+            echo "**Base:** \`${{ github.event.pull_request.base.ref }}\` · **Head:** \`${{ github.event.pull_request.head.ref }}\`"
+            echo ""
+            echo '```'
+            git diff --shortstat "$BASE"...HEAD
+            echo '```'
+            echo "<details><summary>Files changed</summary>"
+            echo ""
+            git diff --name-only "$BASE"...HEAD | sed 's/^/- /'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Warn on very large PRs
+        env:
+          BASE: origin/${{ github.event.pull_request.base.ref }}
+        run: |
+          changes=$(git diff --numstat "$BASE"...HEAD | awk '{s += $1 + $2} END {print s + 0}')
+          echo "Total lines changed: $changes"
+          if [ "$changes" -gt 1000 ]; then
+            echo "::warning::This PR changes $changes lines. Consider splitting it into smaller PRs."
+          fi

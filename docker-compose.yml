@@ -1,0 +1,118 @@
+# Production-style stack: PostgreSQL + Redis + MLflow + FastAPI backend + nginx-served frontend
+#   1. cp .env.example .env   and fill in SECRET_KEY, POSTGRES_PASSWORD, ADMIN_EMAILS (+ OAuth keys)
+#   2. docker compose up -d --build
+#   Frontend: http://localhost:3000   API: http://localhost:8000/api/docs   MLflow UI: http://localhost:5000
+#
+# Model flow: model-init registers the bundled model in MLflow (once) as
+# marine-edna-classifier@champion; the backend loads models:/marine-edna-classifier@champion.
+# Inside the Docker network the backend reaches MLflow at http://mlflow:5000 (service name),
+# never localhost, which inside a container means the container itself.
+name: deepsea-edna
+
+x-mlflow-client: &mlflow-client
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+  MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME:-marine-edna-classifier}
+  MLFLOW_MODEL_ALIAS: ${MLFLOW_MODEL_ALIAS:-champion}
+  MLFLOW_EXPERIMENT: ${MLFLOW_EXPERIMENT:-marine-edna-classification}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-deepsea}
+      POSTGRES_USER: ${POSTGRES_USER:-deepsea}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deepsea} -d ${POSTGRES_DB:-deepsea}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No host port: the database is reachable only from the backend container
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]  # cache only, no persistence
+
+  mlflow:
+    # Same version as the mlflow-skinny client in backend/requirements.txt
+    image: ghcr.io/mlflow/mlflow:v3.17.2
+    restart: unless-stopped
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=sqlite:////mlflow/mlflow.db
+      # Proxied artifacts: clients download model files through the tracking server,
+      # so containers only need the tracking URI, not direct access to the artifact store
+      - --artifacts-destination=/mlflow/artifacts
+      # MLflow 3.5+ rejects unknown Host headers (DNS-rebinding protection)
+      - --allowed-hosts=mlflow:5000,localhost:5000,127.0.0.1:5000,host.docker.internal:5000
+    volumes:
+      - mlflowdata:/mlflow
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  model-init:
+    # One-shot: register the bundled model as v1 @champion if the registry has no champion yet
+    build: .
+    image: deepsea-edna-api:latest
+    command: ["python", "-m", "app.ml.cli", "bootstrap"]
+    environment:
+      <<: *mlflow-client
+    restart: "no"
+    depends_on:
+      mlflow:
+        condition: service_healthy
+
+  backend:
+    build: .
+    image: deepsea-edna-api:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *mlflow-client
+      ENVIRONMENT: production
+      MODEL_SOURCE: mlflow  # serve the registry champion; fail fast if MLflow is unreachable
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-deepsea}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-deepsea}
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /app/data/uploads
+      STATE_DIR: /app/data/state
+    volumes:
+      - appdata:/app/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      model-init:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: ${BACKEND_PUBLIC_URL:-http://localhost:8000}
+    image: deepsea-edna-web:latest
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  appdata:
+  mlflowdata:
