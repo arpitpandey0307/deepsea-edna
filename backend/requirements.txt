@@ -28,6 +28,10 @@ numpy>=1.24.0
 biopython>=1.81
 pandas>=2.0.0  # export formats
 
+# Model-quality assessment workflow
+scikit-learn>=1.4.0
+joblib>=1.3.0
+
 # File handling, monitoring & caching
 aiofiles>=23.2.1
 prometheus-client>=0.21.0

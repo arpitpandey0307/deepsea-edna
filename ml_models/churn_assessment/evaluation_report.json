@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-11-20T10:00:01.349635+00:00",
+  "dataset": "incoming_batch.csv",
+  "task_a_data_validation": {
+    "rows": 60,
+    "columns": 8,
+    "missing_values": {},
+    "duplicate_customer_ids": 0,
+    "target_distribution": {
+      "yes": 38,
+      "no": 22
+    }
+  },
+  "incoming_batch": {
+    "rows": 12,
+    "target_distribution": {
+      "yes": 8,
+      "no": 4
+    }
+  },
+  "existing_training_split": {
+    "rows": 48
+  },
+  "task_b_existing_model": {
+    "artifact": "ml_models\\churn_assessment\\champion.joblib",
+    "metrics": {
+      "accuracy": 0.8333333333333334,
+      "precision": 0.875,
+      "recall": 0.875,
+      "f1": 0.875
+    }
+  },
+  "task_c_candidate_model": {
+    "artifact": "ml_models\\churn_assessment\\candidate.joblib",
+    "metrics": {
+      "accuracy": 0.8333333333333334,
+      "precision": 0.875,
+      "recall": 0.875,
+      "f1": 0.875
+    },
+    "training_rows": 60
+  },
+  "task_d_quality_gate": {
+    "selected_metric": "f1",
+    "reason": "F1 balances precision and recall for the imbalanced churn outcome.",
+    "required_rule": "candidate F1 must be greater than or equal to champion F1",
+    "champion_f1": 0.875,
+    "candidate_f1": 0.875,
+    "improvement": 0.0,
+    "decision": "eligible_for_promotion",
+    "champion_overwritten": false
+  }
+}
